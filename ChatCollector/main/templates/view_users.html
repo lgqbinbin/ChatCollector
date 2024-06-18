@@ -1,0 +1,130 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Users - ChatCollector</title>
+    <link rel="stylesheet" href="{% static 'css/view_users.css' %}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Admin Dashboard</h1>
+        </header>
+
+        <div class="button-container">
+            <button id="btn-users">All Users</button>
+            <button id="btn-tables">All Tables</button>
+        </div>
+
+        <!-- 用户表格 -->
+        <section id="users-section" class="collapsible" style="display: none;">
+            <h2>All Users</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Profile</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.profile }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <!-- 表单列表 -->
+        <section id="tables-section" class="collapsible" style="display: none;">
+            <h2>All Tables</h2>
+            <ul id="table-list">
+                {% for table in tables %}
+                <li><a href="#" class="table-link" data-table="{{ table }}">{{ table }}</a></li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <!-- 表单数据 -->
+        <section id="table-data-section" class="collapsible" style="display: none;">
+            <h2 id="table-name-title"></h2>
+            <table id="table-data">
+                <thead>
+                    <tr id="table-data-head"></tr>
+                </thead>
+                <tbody id="table-data-body"></tbody>
+            </table>
+        </section>
+
+        <a href="{% url 'login' %}">Back to Dashboard</a>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const btnUsers = document.getElementById('btn-users');
+        const btnTables = document.getElementById('btn-tables');
+        const usersSection = document.getElementById('users-section');
+        const tablesSection = document.getElementById('tables-section');
+        const tableDataSection = document.getElementById('table-data-section');
+
+        btnUsers.addEventListener('click', function() {
+            usersSection.style.display = 'block';
+            tablesSection.style.display = 'none';
+            tableDataSection.style.display = 'none';
+        });
+
+        btnTables.addEventListener('click', function() {
+            usersSection.style.display = 'none';
+            tablesSection.style.display = 'block';
+            tableDataSection.style.display = 'none';
+        });
+
+        document.querySelectorAll('.table-link').forEach(function(link) {
+            link.addEventListener('click', function(event) {
+                event.preventDefault();
+                const tableName = this.getAttribute('data-table');
+                fetchTableData(tableName);
+            });
+        });
+
+        function fetchTableData(tableName) {
+            fetch(`/get_table_data/${tableName}/`)
+                .then(response => response.json())
+                .then(data => {
+                    displayTableData(tableName, data);
+                });
+        }
+
+        function displayTableData(tableName, data) {
+            tableDataSection.style.display = 'block';
+            document.getElementById('table-name-title').textContent = `Data for table: ${tableName}`;
+
+            const tableHead = document.getElementById('table-data-head');
+            tableHead.innerHTML = '';
+            data.columns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column;
+                tableHead.appendChild(th);
+            });
+
+            const tableBody = document.getElementById('table-data-body');
+            tableBody.innerHTML = '';
+            data.rows.forEach(row => {
+                const tr = document.createElement('tr');
+                row.forEach(cell => {
+                    const td = document.createElement('td');
+                    td.textContent = cell;
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+    });
+    </script>
+</body>
+</html>

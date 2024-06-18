@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理员设置表头</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            width: 80%;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            margin-top: 50px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .field-container {
+            display: flex;
+            margin-bottom: 10px;
+        }
+
+        .field-container input, .field-container select {
+            flex: 1;
+            padding: 10px;
+            margin-right: 10px;
+        }
+
+        .field-container button {
+            padding: 10px;
+        }
+
+        .buttons {
+            text-align: center;
+        }
+
+        .buttons button {
+            padding: 10px 20px;
+            margin: 10px;
+        }
+
+        .sql-container {
+            display: none;
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form method="get" action="{% url 'view_users' %}">
+        <button type="submit">View User Information</button>
+    </form>
+    <h1>设置表头字段</h1>
+    <form id="tableForm">
+        {% csrf_token %}
+        <div class="field-container">
+            <input type="text" name="tableName" placeholder="表的名字" required>
+        </div>
+        <div id="fields">
+            <div class="field-container">
+                <input type="text" name="fieldName[]" placeholder="字段名称" required>
+                <select name="fieldType[]" required>
+                    <option value="INT">整数</option>
+                    <option value="VARCHAR(255)">字符串</option>
+                    <option value="TEXT">长文本</option>
+                    <option value="DATE">日期</option>
+                    <option value="DATETIME">日期时间</option>
+                    <option value="FLOAT">单精度数值</option>
+                    <option value="DOUBLE">双精度数值</option>
+                    <option value="BOOLEAN">是/否</option>
+                </select>
+                <button type="button" onclick="removeField(this)">删除</button>
+            </div>
+        </div>
+        <div class="buttons">
+            <button type="button" onclick="addField()">添加字段</button>
+            <button type="button" onclick="toggleSQL()">展示建表SQL语句</button>
+
+            <input type="datetime-local" name="start_time" required>
+            <input type="datetime-local" name="end_time" required>
+
+            <button type="submit">保存表头</button>
+            <button type="button" onclick="collectForm()">收集表单</button>
+        </div>
+        <div class="sql-container" id="sqlContainer"></div>
+        <div id="publishConditionBox" style="border: 1px solid #ccc; padding: 10px; margin-top: 20px; display: flex; align-items: center;">
+            <div style="flex: 1;">
+                <h3>发布条件</h3>
+                <label for="publishType">Type：</label>
+                <input type="text" id="publishType" name="publishType"><br><br>
+
+                <label for="publishContent">内容：</label>
+                <input type="text" id="publishContent" name="publishContent"><br><br>
+            </div>
+            <button type="button" id="startPublishButton" style="margin-left: 10px; padding: 8px 15px; background-color: #4CAF50; color: white; border: none; cursor: pointer;">
+                开始发布
+            </button>
+        </div>
+    </form>
+
+    <script>
+        function addField() {
+            const fieldsContainer = document.getElementById('fields');
+            const newField = document.createElement('div');
+            newField.className = 'field-container';
+            newField.innerHTML = `
+                <input type="text" name="fieldName[]" placeholder="字段名称" required>
+                <select name="fieldType[]" required>
+                    <option value="INT">整数</option>
+                    <option value="VARCHAR(255)">字符串</option>
+                    <option value="TEXT">长文本</option>
+                    <option value="DATE">日期</option>
+                    <option value="DATETIME">日期时间</option>
+                    <option value="FLOAT">单精度数值</option>
+                    <option value="DOUBLE">双精度数值</option>
+                    <option value="BOOLEAN">是/否</option>
+                </select>
+                <button type="button" onclick="removeField(this)">删除</button>
+            `;
+            fieldsContainer.appendChild(newField);
+        }
+
+        function removeField(button) {
+            const fieldContainer = button.parentNode;
+            fieldContainer.parentNode.removeChild(fieldContainer);
+        }
+
+        function toggleSQL() {
+            const sqlContainer = document.getElementById('sqlContainer');
+            if (sqlContainer.style.display === 'none' || sqlContainer.style.display === '') {
+                generateSQL();
+                sqlContainer.style.display = 'block';
+            } else {
+                sqlContainer.style.display = 'none';
+            }
+        }
+
+        function generateSQL() {
+            const formData = new FormData(document.getElementById('tableForm'));
+            const tableName = formData.get('tableName');
+            const fields = [];
+            for (let i = 0; i < formData.getAll('fieldName[]').length; i++) {
+                fields.push({
+                    name: formData.getAll('fieldName[]')[i],
+                    type: formData.getAll('fieldType[]')[i]
+                });
+            }
+            let sql = `CREATE TABLE ${tableName} (\n`;
+
+            fields.forEach((field, index) => {
+                if (index === 0) {
+                    sql += `  ${field.name} ${field.type}`;
+                } else {
+                    sql += `,\n  ${field.name} ${field.type}`;
+                }
+            });
+            sql += '\n);';
+            document.getElementById('sqlContainer').textContent = sql;
+            return sql;
+        }
+
+        document.getElementById('tableForm').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const sql = generateSQL();
+            fetch('{% url "manage" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({sql: sql})
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('表头已保存');
+                    } else {
+                        alert('保存表头失败: ' + data.error);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+
+        });
+
+        function collectForm() {
+            const formData = new FormData(document.getElementById('tableForm'));
+            const tableName = formData.get('tableName');
+            const tableFields = '|' + formData.getAll('fieldName[]').join('|') + '|';
+
+            // 获取开始时间和结束时间
+            const startTime = formData.get('start_time');
+            const endTime = formData.get('end_time');
+
+
+            fetch('{% url "collect_form" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    table: tableFields,
+                    tableName: tableName,
+                    start_time: startTime,
+                    end_time: endTime
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('表单已收集并插入数据');
+                    } else {
+                        alert('表单收集失败: ' + data.error);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        document.getElementById('startPublishButton').addEventListener('click', function () {
+            const table_name = document.querySelector('input[name="tableName"]').value;
+            const type_value = document.getElementById('publishType').value;
+            const publishContent = document.getElementById('publishContent').value; // 获取发布内容的值
+
+
+            if (!table_name || !type_value) {
+                alert('表名称和发布类型不能为空');
+                return;
+            }
+
+            fetch('{% url "start_publish" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    table_name: table_name,
+                    type_value: type_value,
+                    publish_content: publishContent // 包含发布内容的值
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('发布成功');
+                    } else {
+                        alert('发布失败: ' + data.error);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+    </script>
+</div>
+</body>
+</html>

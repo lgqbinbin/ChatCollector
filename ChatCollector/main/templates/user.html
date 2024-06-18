@@ -1,0 +1,190 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>All Users - ChatCollector</title>
+    <link rel="stylesheet" href="{% static 'css/user.css' %}">
+</head>
+<body>
+<header>
+    <div class="container">
+        <div class="user-info">
+            {% if username %}
+            Logged in as: {{ username }} (ID: <span id="user-id">{{ user_id }}</span>)
+            <a href="{% url 'logout' %}">Logout</a>
+            {% else %}
+            <a href="{% url 'login' %}">Login</a>
+            {% endif %}
+        </div>
+    </div>
+</header>
+
+<div class="container">
+    <div class="dropdown">
+        <button class="dropbtn">Options</button>
+        <div class="dropdown-content">
+            {% for table_name in table_names %}
+            <a href="#" class="table-option">{{ table_name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <h1>Show Table</h1>
+
+    <div id="table-info">
+        <p>Table Name: <span id="table-name"></span></p>
+        <p>Start Time: <span id="start-time"></span></p>
+        <p>End Time: <span id="end-time"></span></p>
+    </div>
+
+    <div id="table-data"></div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const user_id = document.getElementById('user-id').textContent.trim(); // 获取 user_id 的值
+        let selectedTableName = ''; // 添加一个变量来存储选中的表名
+
+        // 监听下拉菜单中每个选项的点击事件
+        document.querySelectorAll('.dropdown-content .table-option').forEach(function (option) {
+            option.addEventListener('click', function (event) {
+                event.preventDefault();  // 阻止默认链接跳转行为
+
+                // 获取用户选择的表名
+                selectedTableName = event.target.textContent;
+
+                // 清空之前的表名和时间信息
+                document.getElementById('table-name').textContent = '';
+                document.getElementById('start-time').textContent = '';
+                document.getElementById('end-time').textContent = '';
+
+
+                if (selectedTableName === 'main_user' || selectedTableName === 'time_record') {
+                    document.getElementById('table-name').textContent = selectedTableName;
+                } else {
+                    // 发送 AJAX 请求以获取表名的时间信息
+                    fetch(`/get_time_record/${selectedTableName}/`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.error) {
+                                document.getElementById('table-name').textContent = '';
+                                document.getElementById('start-time').textContent = '';
+                                document.getElementById('end-time').textContent = data.error;
+                            } else {
+                                document.getElementById('table-name').textContent = data.table_name;
+                                document.getElementById('start-time').textContent = data.start_time;
+                                document.getElementById('end-time').textContent = data.end_time;
+                            }
+                        });
+                }
+
+
+                // 发送 AJAX 请求以获取表中的数据
+                const xhr = new XMLHttpRequest();
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState === 4 && xhr.status === 200) {
+                        // 解析返回的 JSON 数据
+                        const responseData = JSON.parse(xhr.responseText);
+                        // 格式化数据并插入到页面中
+                        const tableHTML = formatDataAsHTML(responseData);
+                        document.getElementById('table-data').innerHTML = tableHTML;
+                    }
+                };
+                xhr.open('GET', `/get_table_data/?table=${selectedTableName}&user_id=${user_id}`, true);
+                xhr.send();
+            });
+        });
+
+        // 格式化数据为 HTML 表格
+        // function formatDataAsHTML(data) {
+        //     let html = '<table>';
+        //     html += '<thead><tr>';
+        //     data.columns.forEach(column => {
+        //         html += `<th>${column}</th>`;
+        //     });
+        //     html += '</tr></thead>';
+        //     html += '<tbody>';
+        //     data.data.forEach(row => {
+        //         html += '<tr>';
+        //         row.forEach((cell, index) => {
+        //             html += `<td contenteditable="true" data-column="${data.columns[index]}" data-id="${row[0]}">${cell}</td>`;
+        //         });
+        //         html += '</tr>';
+        //     });
+        //     html += '</tbody></table>';
+        //     html += '<button id="save-changes">Save Changes</button>';
+        //     return html;
+        // }
+        function formatDataAsHTML(data) {
+            let html = '';
+            data.data.forEach(row => {
+                html += '<div class="data-row">';
+                row.forEach((cell, index) => {
+                    html += `
+                        <div class="data-field">
+                            <label>${data.columns[index]}</label>
+                            <div contenteditable="true" class="data-cell" data-column="${data.columns[index]}" data-id="${row[0]}">${cell}</div>
+                        </div>`;
+                });
+                html += '</div>';
+            });
+            html += '<button id="save-changes">Save Changes</button>';
+            return html;
+        }
+
+
+        document.getElementById('table-data').addEventListener('click', function (event) {
+            if (event.target && event.target.id === 'save-changes') {
+                if (selectedTableName === 'main_user') {
+                    // 如果当前表格是 main_user，则直接执行更新操作
+                    updateData(selectedTableName);
+                } else {
+                    // 发送请求以检查当前时间是否在填写时间范围内
+                    const xhr = new XMLHttpRequest();
+                    xhr.onreadystatechange = function () {
+                        if (xhr.readyState === 4 && xhr.status === 200) {
+                            const response = JSON.parse(xhr.responseText);
+                            if (response.allowed) {
+                                // 如果允许更新数据，执行更新操作
+                                updateData(selectedTableName);
+                            } else {
+                                // 如果不允许更新数据，显示提示消息
+                                alert(response.message);
+                            }
+                        }
+                    };
+                    xhr.open('GET', `/check_time_range/${selectedTableName}/`, true);
+                    xhr.send();
+                }
+            }
+        });
+
+        function updateData(selectedTableName) {
+            const rows = document.querySelectorAll('.data-row');
+            const updatedData = [];
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('.data-cell');
+                const rowData = {};
+                cells.forEach(cell => {
+                    rowData[cell.getAttribute('data-column')] = cell.textContent;
+                });
+                updatedData.push(rowData);
+            });
+
+            // 发送更新的数据到后端
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/update_table_data/', true);
+            xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    alert('Data updated successfully');
+                }
+            };
+            xhr.send(JSON.stringify({table: selectedTableName, data: updatedData}));
+        }
+    });
+</script>
+</body>
+</html>
